@@ -1,0 +1,41 @@
+
+:root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji'; }
+body { margin: 0; background: #f8fafc; color: #0f172a; }
+* { box-sizing: border-box; }
+.bg-white { background:#fff; }
+.bg-slate-50{background:#f8fafc}
+.text-slate-500{color:#64748b}
+.text-slate-600{color:#475569}
+.text-slate-700{color:#334155}
+.text-slate-800{color:#1e293b}
+.border{border:1px solid #e5e7eb}
+.border-gray-100{border-color:#f3f4f6}
+.border-slate-200{border-color:#e2e8f0}
+.rounded{border-radius:.5rem}
+.rounded-xl{border-radius:1rem}
+.rounded-2xl{border-radius:1.5rem}
+.shadow-sm{box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.p-1{padding:.25rem}.p-2{padding:.5rem}.p-3{padding:.75rem}.p-4{padding:1rem}.p-6{padding:1.5rem}
+.px-2{padding-left:.5rem;padding-right:.5rem}.px-3{padding-left:.75rem;padding-right:.75rem}
+.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}
+.mr-2{margin-right:.5rem}.mb-1{margin-bottom:.25rem}.mb-2{margin-bottom:.5rem}.mb-3{margin-bottom:.75rem}
+.mt-1{margin-top:.25rem}.mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}
+.space-y-4>*+*{margin-top:1rem}
+.grid{display:grid}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.md\:grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.gap-1{gap:.25rem}.gap-2{gap:.5rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}
+.flex{display:flex}.items-center{align-items:center}.flex-wrap{flex-wrap:wrap}
+.min-w-full{min-width:100%}.w-full{width:100%}
+.text-xs{font-size:.75rem}.text-sm{font-size:.875rem}.text-lg{font-size:1.125rem}
+.font-semibold{font-weight:600}
+.rounded-full{border-radius:9999px}
+.bg-gray-100{background:#f5f5f5}.text-gray-700{color:#374151}
+.bg-green-100{background:#dcfce7}.text-green-700{color:#166534}
+.bg-red-100{background:#fee2e2}.text-red-700{color:#991b1b}
+.bg-yellow-100{background:#fef3c7}.text-yellow-700{color:#b45309}
+.bg-blue-100{background:#dbeafe}.text-blue-700{color:#1d4ed8}
+.bg-slate-100{background:#f1f5f9}.text-slate-700{color:#334155}
+.border-gray-200{border-color:#e5e7eb}
+.rounded-xl{border-radius:0.75rem}
+.rounded-2xl{border-radius:1rem}
+.bg-slate-200{background:#e2e8f0}

@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sinya KPI 工具 — 單一 HTML (UMD)</title>
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; background:#f8fafc; color:#0f172a; font-family: ui-sans-serif, -apple-system, Segoe UI, Roboto, "Noto Sans", Arial; }
+    .container { padding: 16px; max-width: 1200px; margin: 0 auto; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius: 16px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    .title { font-size: 18px; font-weight: 600; color:#1f2937; margin: 0 0 8px; }
+    .subtle { font-size: 12px; color:#6b7280; margin: 2px 0 0; }
+    .grid { display:grid; gap:12px; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
+    .btn { padding: 6px 10px; border-radius: 10px; border:1px solid #e5e7eb; background:#fff; cursor:pointer; }
+    .btn:hover { background:#f3f4f6; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:12px; font-weight:600; }
+    .b-green { background:#dcfce7; color:#166534; }
+    .b-yellow { background:#fef3c7; color:#b45309; }
+    .b-red { background:#fee2e2; color:#991b1b; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: left; font-size: 14px; }
+    thead th { background:#f1f5f9; color:#334155; font-weight:600; }
+    input, select { width: 100%; padding: 6px 8px; border-radius: 10px; border:1px solid #e5e7eb; background:#fff; }
+  </style>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://unpkg.com/jspdf-autotable@3.8.3/dist/jspdf.plugin.autotable.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useMemo, useEffect } = React;
+    const { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Pie, PieChart } = Recharts;
+
+    const Badge = ({ children, intent }) => {
+      const cls = intent === 'green' ? 'badge b-green' : intent === 'yellow' ? 'badge b-yellow' : intent === 'red' ? 'badge b-red' : 'badge';
+      return <span className={cls}>{children}</span>;
+    };
+    const Card = ({ title, subtitle, children }) => (
+      <div className="card">
+        <div style={{marginBottom:8}}>
+          <div className="title">{title}</div>
+          {subtitle && <div className="subtle">{subtitle}</div>}
+        </div>
+        {children}
+      </div>
+    );
+
+    const MONTHS = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+    const sampleBuyers = ["黃文衍","劉哲志"]; 
+    const sampleCategories = ["電競零組件","系統","筆電","外設","網通","配件"];
+    const DEFAULT_ROWS = [
+      { id: String(Date.now()), year: new Date().getFullYear(), month: "09", buyer: "黃文衍", category: "電競零組件", salesTarget: 12000000, salesActual: 10250000, gpTarget: 1320000, gpActual: 1180000, notes: "9月拉貨不及，10月補" }
+    ];
+
+    const fmt = (n) => (isNaN(n) ? "-" : Number(n).toLocaleString());
+    const pct = (num, den) => (!den ? 0 : Math.round((num / den) * 1000) / 10);
+    const clampNum = (v) => (Number.isFinite(+v) ? +v : 0);
+
+    function useLocalStorage(key, initial) {
+      const [value, setValue] = React.useState(() => {
+        try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : initial; } catch { return initial; }
+      });
+      React.useEffect(()=>{ try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }, [key, value]);
+      return [value, setValue];
+    }
+
+    function App(){
+      const thisYear = new Date().getFullYear();
+      const [rows, setRows] = useLocalStorage('kpi_rows_v1', DEFAULT_ROWS);
+      const [year, setYear] = useLocalStorage('kpi_year_v1', thisYear);
+      const [month, setMonth] = useLocalStorage('kpi_month_v1', new Date().toLocaleString('zh-TW', { month: '2-digit' }));
+      const [buyers, setBuyers] = useLocalStorage('kpi_buyers_v1', sampleBuyers);
+      const [categories, setCategories] = useLocalStorage('kpi_categories_v1', sampleCategories);
+      const [settings, setSettings] = useLocalStorage('kpi_settings_v1', { salesWeight: 70, gpWeight: 30, green: 100, yellow: 95 });
+
+      const filtered = React.useMemo(()=> rows.filter(r => r.year === year && r.month === month), [rows, year, month]);
+
+      const totals = React.useMemo(()=>{
+        const st = filtered.reduce((a,r)=>a+clampNum(r.salesTarget),0);
+        const sa = filtered.reduce((a,r)=>a+clampNum(r.salesActual),0);
+        const gt = filtered.reduce((a,r)=>a+clampNum(r.gpTarget),0);
+        const ga = filtered.reduce((a,r)=>a+clampNum(r.gpActual),0);
+        const sRate = pct(sa,st), gRate = pct(ga,gt);
+        const comp = Math.round((sRate*settings.salesWeight/100 + gRate*settings.gpWeight/100)*10)/10;
+        return { st, sa, gt, ga, sRate, gRate, comp };
+      },[filtered, settings]);
+
+      const matrix = React.useMemo(()=>{
+        const bList = Array.from(new Set(filtered.map(r=>r.buyer)));
+        const cList = Array.from(new Set(filtered.map(r=>r.category)));
+        const map={}; bList.forEach(b=>{ map[b]={}; cList.forEach(c=> map[b][c] = { st:0, sa:0 }); });
+        filtered.forEach(r=>{ map[r.buyer][r.category].st += clampNum(r.salesTarget); map[r.buyer][r.category].sa += clampNum(r.salesActual); });
+        return { bList, cList, map };
+      },[filtered]);
+
+      const exportXLSX = ()=>{
+        // Sheet 1: 明細
+        const ws1 = XLSX.utils.json_to_sheet(filtered.map(r=>({
+          年:r.year, 月:r.month, 採購:r.buyer, 類別:r.category, Sales目標:r.salesTarget, Sales實績:r.salesActual, GP目標:r.gpTarget, GP實績:r.gpActual, 備註:r.notes||''
+        })));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws1, `${year}-${month}`);
+        // Sheet 2: 交叉彙總
+        const header = ["採購 \\ 類別", ...matrix.cList];
+        const rowsX = matrix.bList.map(b=>{
+          const row = [b];
+          matrix.cList.forEach(c=>{
+            const cell = matrix.map[b][c] || { st:0, sa:0 };
+            const rate = pct(cell.sa, cell.st);
+            row.push(`${cell.sa} / ${cell.st} (${rate}%)`);
+          });
+          return row;
+        });
+        const ws2 = XLSX.utils.aoa_to_sheet([header, ...rowsX]);
+        XLSX.utils.book_append_sheet(wb, ws2, "交叉彙總");
+        XLSX.writeFile(wb, `kpi-${year}-${month}.xlsx`);
+      };
+
+      const exportPDF = ()=>{
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation:'landscape' });
+        doc.setFontSize(12); doc.text(`本月 KPI 報表 ${year}/${month}`, 14, 15);
+        doc.autoTable({ head: [["年","月","採購","類別","Sales目標","Sales實績","GP目標","GP實績","備註"]], body: filtered.map(r=>[r.year,r.month,r.buyer,r.category,r.salesTarget,r.salesActual,r.gpTarget,r.gpActual,r.notes||""]) });
+        doc.addPage('landscape');
+        doc.text(`交叉彙總（採購 × 類別） — Sales 實績/目標（%）`, 14, 15);
+        const head = [["採購 \\ 類別", ...matrix.cList]];
+        const body = matrix.bList.map(b=>{
+          const row = [b];
+          matrix.cList.forEach(c=>{
+            const cell = (matrix.map[b] && matrix.map[b][c]) ? matrix.map[b][c] : { st:0, sa:0 };
+            const rate = pct(cell.sa, cell.st);
+            row.push(`${cell.sa} / ${cell.st} (${rate}%)`);
+          });
+          return row;
+        });
+        doc.autoTable({ head, body });
+        doc.save(`kpi-${year}-${month}.pdf`);
+      };
+
+      const RateBadge = ({ rate }) => {
+        const intent = rate >= settings.green ? 'green' : rate >= settings.yellow ? 'yellow' : 'red';
+        return <span className={intent==='green'?'badge b-green':intent==='yellow'?'badge b-yellow':'badge b-red'}>{rate.toFixed(1)}%</span>;
+      };
+
+      return (
+        <div className="container">
+          <div className="card" style={{position:'sticky',top:0, zIndex:10, backdropFilter:'blur(6px)'}}>
+            <div className="row" style={{justifyContent:'space-between'}}>
+              <div className="row">
+                <div style={{width:36,height:36,borderRadius:10,background:'#0f172a',color:'#fff',display:'grid',placeItems:'center',fontWeight:700}}>KPI</div>
+                <div>
+                  <div className="title" style={{marginLeft:8}}>KPI Studio — 每月 / 採購 / 產品類</div>
+                  <div className="subtle" style={{marginLeft:8}}>單一 HTML；交叉表、XLSX/PDF 匯出、權重＆紅黃綠門檻、在地儲存</div>
+                </div>
+              </div>
+              <div className="row">
+                <button className="btn" onClick={exportXLSX}>XLSX 匯出</button>
+                <button className="btn" onClick={exportPDF}>PDF 匯出</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid" style={{marginTop:16, gridTemplateColumns:'2fr 1fr', gap:16}}>
+            <div className="grid" style={{gap:16}}>
+              <Card title="設定">
+                <div className="grid grid-4" style={{marginBottom:12}}>
+                  <div><div className="subtle">年度</div><input type="number" value={year} onChange={e=>setYear(clampNum(e.target.value))} /></div>
+                  <div><div className="subtle">月份</div><select value={month} onChange={e=>setMonth(e.target.value)}>{MONTHS.map(m=> <option key={m} value={m}>{m}</option>)}</select></div>
+                  <div><div className="subtle">Sales 權重 (%)</div><input type="number" value={settings.salesWeight} onChange={e=>setSettings({...settings, salesWeight: clampNum(e.target.value)})} /></div>
+                  <div><div className="subtle">GP 權重 (%)</div><input type="number" value={settings.gpWeight} onChange={e=>setSettings({...settings, gpWeight: clampNum(e.target.value)})} /></div>
+                </div>
+                <div className="grid grid-2">
+                  <div><div className="subtle">綠燈門檻 ≥ (%)</div><input type="number" value={settings.green} onChange={e=>setSettings({...settings, green: clampNum(e.target.value)})} /></div>
+                  <div><div className="subtle">黃燈門檻 ≥ (%)</div><input type="number" value={settings.yellow} onChange={e=>setSettings({...settings, yellow: clampNum(e.target.value)})} /></div>
+                </div>
+                <div className="row" style={{marginTop:12}}>
+                  <span className="badge b-green">≥ {settings.green}% 綠燈</span>
+                  <span className="badge b-yellow">≥ {settings.yellow}% 黃燈</span>
+                  <span className="badge b-red">&lt; {settings.yellow}% 紅燈</span>
+                </div>
+                <div className="card" style={{marginTop:12, background:'#f8fafc'}}>
+                  <div className="subtle">即時預覽</div>
+                  <div className="row" style={{marginTop:8}}>
+                    <div className="row"><RateBadge rate={settings.green+2}/> <span className="subtle">高於綠燈 ({(settings.green+2).toFixed(1)}%)</span></div>
+                    <div className="row"><RateBadge rate={settings.yellow+1}/> <span className="subtle">介於黃/綠 ({(settings.yellow+1).toFixed(1)}%)</span></div>
+                    <div className="row"><RateBadge rate={Math.max(0,settings.yellow-2)}/> <span className="subtle">低於黃燈 ({Math.max(0,settings.yellow-2).toFixed(1)}%)</span></div>
+                  </div>
+                </div>
+              </Card>
+
+              <Card title="交叉彙總 (採購×類別)" subtitle="每格：Sales 實績 / 目標 + 達成率">
+                <table>
+                  <thead><tr><th>採購 / 類別</th>{matrix.cList.map(c => <th key={c}>{c}</th>)}</tr></thead>
+                  <tbody>
+                    {matrix.bList.map(b => (
+                      <tr key={b}>
+                        <td><strong>{b}</strong></td>
+                        {matrix.cList.map(c => {
+                          const cell = matrix.map[b][c]; const rate = pct(cell.sa, cell.st);
+                          return <td key={c}><div className="subtle">{fmt(cell.sa)} / {fmt(cell.st)}</div><RateBadge rate={rate} /></td>;
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            </div>
+
+            <div className="grid" style={{gap:16}}>
+              <Card title="彙總" subtitle="依本月篩選">
+                <div className="grid grid-2">
+                  <div className="card" style={{background:'#f8fafc'}}>
+                    <div className="subtle">Sales 實績 / 目標</div>
+                    <div style={{fontWeight:600, marginTop:6}}>{fmt(totals.sa)} / {fmt(totals.st)}</div>
+                    <div style={{marginTop:6}}><RateBadge rate={totals.sRate}/></div>
+                  </div>
+                  <div className="card" style={{background:'#f8fafc'}}>
+                    <div className="subtle">GP 實績 / 目標</div>
+                    <div style={{fontWeight:600, marginTop:6}}>{fmt(totals.ga)} / {fmt(totals.gt)}</div>
+                    <div style={{marginTop:6}}><RateBadge rate={totals.gRate}/></div>
+                  </div>
+                  <div className="card" style={{background:'#f8fafc'}}>
+                    <div className="subtle">複合達成率（權重：Sales {settings.salesWeight}% / GP {settings.gpWeight}%）</div>
+                    <div style={{fontWeight:600, marginTop:6}}>{totals.comp.toFixed(1)}%</div>
+                    <div style={{marginTop:6}}><RateBadge rate={totals.comp}/></div>
+                  </div>
+                </div>
+              </Card>
+
+              <Card title="圖表（依採購）" subtitle="Sales 目標 vs 實績">
+                <div style={{height:260}}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={Array.from(new Set(filtered.map(r=>r.buyer))).map(b=>{
+                      const st = filtered.filter(r=>r.buyer===b).reduce((a,r)=>a+clampNum(r.salesTarget),0);
+                      const sa = filtered.filter(r=>r.buyer===b).reduce((a,r)=>a+clampNum(r.salesActual),0);
+                      return { name:b, 目標:st, 實績:sa };
+                    })}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="目標" />
+                      <Bar dataKey="實績" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+
+              <Card title="圖表（依產品類別）" subtitle="實績占比">
+                <div style={{height:260}}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={Array.from(new Set(filtered.map(r=>r.category))).map(c=>({
+                        name:c, value: filtered.filter(r=>r.category===c).reduce((a,r)=>a+clampNum(r.salesActual),0)
+                      }))} dataKey="value" nameKey="name" outerRadius={90} label />
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+
+              <Card title="下載報表">
+                <div className="row">
+                  <button className="btn" onClick={exportXLSX}>XLSX 匯出</button>
+                  <button className="btn" onClick={exportPDF}>PDF 匯出</button>
+                </div>
+              </Card>
+            </div>
+          </div>
+          <div className="subtle" style={{textAlign:'center', margin:'24px 0'}}>＊所有資料與設定皆自動保存在瀏覽器的本機儲存空間（localStorage）。</div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>
